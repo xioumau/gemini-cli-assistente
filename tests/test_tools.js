@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs';
-import { injetarArquivos } from './tools.js';
+import { injetarArquivos } from '../src/utils/tools.js';
 
 describe('Testes da Ferramenta de Leitura', () => {
   
