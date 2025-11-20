@@ -1,0 +1,7 @@
+    const sugestoes = extrairSugestoesArquivos(texto);
+
+    assert.strictEqual(sugestoes.length, 0, 'Não deveria encontrar sugestões malformadas');
+  });
+
+  test('Deve limpar aspas simples e duplas do nome do arquivo', () => {
+    const texto = `###ARQUIVO: "src/component.jsx"\nconst a = 1;\n
