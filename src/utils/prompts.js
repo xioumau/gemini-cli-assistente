@@ -1,4 +1,28 @@
 // prompts.js
+export function gerarPromptCommit(diff) {
+  return `
+=== TAREFA DE COMMIT GIT ===
+Você é um assistente especialista em Git e Conventional Commits.
+Sua tarefa é gerar uma mensagem de commit curta e descritiva baseada nas alterações abaixo.
+
+REGRA DE OURO:
+Responda APENAS com a mensagem do commit. Sem aspas, sem explicações, sem "Aqui está".
+
+FORMATO (Conventional Commits):
+<tipo>(<escopo opcional>): <descrição breve>
+
+Tipos comuns:
+- feat: nova funcionalidade
+- fix: correção de bug
+- docs: documentação
+- style: formatação
+- refactor: refatoração de código
+- chore: ajustes de build/ferramentas
+
+=== ALTERAÇÕES (GIT DIFF) ===
+${diff}
+`;
+}
 
 export function gerarContexto(pastaAtual, listaArquivos) {
   return `

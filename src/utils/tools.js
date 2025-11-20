@@ -1,52 +1,60 @@
-import { exec } from "child_process";
+import { exec, execSync } from "child_process";
 import fs from "fs";
 import path from "path";
 
-// --- CONFIGURAÇÃO DE BUSCA ---
+// #region 1. Configuração e Helpers Internos
+// =============================================================================
+
 // Pastas que o buscador DEVE ignorar para não travar seu PC
 const IGNORE_DIRS = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage']);
 
-// --- FUNÇÃO "CÃO FAREJADOR" (RECURSIVA) ---
+/**
+ * Função "Cão Farejador" (Recursiva)
+ * Procura um arquivo em todas as subpastas permitidas.
+ */
 function findFileRecursively(dir, filename) {
     let entries;
     try {
-        // Lê o conteúdo da pasta atual com tipos (para saber o que é pasta ou arquivo)
         entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch (err) {
-        return null; // Se não tiver permissão de leitura, ignora
+        return null; 
     }
 
-    // 1. Primeiro, procura na raiz da pasta atual (Prioridade para arquivos rasos)
+    // 1. Procura na raiz atual
     for (const entry of entries) {
         if (entry.isFile() && entry.name === filename) {
             return path.join(dir, entry.name);
         }
     }
 
-    // 2. Se não achou, mergulha nas subpastas permitidas
+    // 2. Mergulha nas subpastas
     for (const entry of entries) {
         if (entry.isDirectory() && !IGNORE_DIRS.has(entry.name)) {
             const found = findFileRecursively(path.join(dir, entry.name), filename);
-            if (found) return found; // Se achou lá no fundo, retorna e para a busca
+            if (found) return found;
         }
     }
 
-    return null; // Não achou em lugar nenhum desta árvore
+    return null;
 }
 
-// 1. Leitura de Arquivos (@arquivo)
+// #endregion
+
+// #region 2. Processamento de Texto e Leitura (@arquivo)
+// =============================================================================
+
+/**
+ * Substitui @nome_do_arquivo pelo conteúdo real do arquivo encontrado.
+ */
 export function injetarArquivos(mensagemUsuario) {
   const regexArquivo = /@([\w\d\.\-\_]+)/g;
   
   return mensagemUsuario.replace(regexArquivo, (match, nomeArquivo) => {
-    
-    // Usa a nova busca inteligente a partir da pasta onde você rodou o comando
     const fullPath = findFileRecursively(process.cwd(), nomeArquivo);
 
     if (fullPath) {
         try {
             const conteudo = fs.readFileSync(fullPath, 'utf8');
-            // Mostra o caminho relativo para você saber qual arquivo exato ele pegou
             const caminhoRelativo = path.relative(process.cwd(), fullPath);
             
             console.log(`\x1b[90m[Sistema] Encontrado: ${caminhoRelativo}...\x1b[0m`);
@@ -60,8 +68,9 @@ export function injetarArquivos(mensagemUsuario) {
   });
 }
 
-// ... (O RESTO DO ARQUIVO CONTINUA IGUAL: extrairSugestoesArquivos, confirmarESalvarArquivos, etc) ...
-// Mantenha as outras funções export extrairSugestoesArquivos, confirmarESalvarArquivos e executarComandoSugerido exatamente como estavam.
+/**
+ * Extrai blocos ###ARQUIVO da resposta da IA.
+ */
 export function extrairSugestoesArquivos(texto) {
     const regex = /###ARQUIVO:[ \t]*([^\r\n]+)[\r\n]+([\s\S]*?)###FIM_ARQUIVO/gi;
     let match;
@@ -69,7 +78,7 @@ export function extrairSugestoesArquivos(texto) {
 
     while ((match = regex.exec(texto)) !== null) {
         let nomeArquivo = match[1].trim().replace(/['"`]/g, ''); 
-        let conteudo = match[2].replace(/^\n/, '');
+        let conteudo = match[2].replace(/^\n/, ''); 
         
         if (nomeArquivo && nomeArquivo.length > 0) {
             sugestoes.push({ nome: nomeArquivo, conteudo: conteudo });
@@ -78,6 +87,14 @@ export function extrairSugestoesArquivos(texto) {
     return sugestoes;
 }
 
+// #endregion
+
+// #region 3. Operações de Escrita em Disco
+// =============================================================================
+
+/**
+ * Pergunta ao usuário se pode salvar os arquivos extraídos.
+ */
 export async function confirmarESalvarArquivos(sugestoes, rl) {
     if (sugestoes.length === 0) return;
 
@@ -105,6 +122,11 @@ export async function confirmarESalvarArquivos(sugestoes, rl) {
     });
 }
 
+// #endregion
+
+// #region 4. Execução de Comandos de Sistema (###CMD)
+// =============================================================================
+
 export async function executarComandoSugerido(texto, rl) {
     const regex = /###CMD:\s*([^\r\n]+)[\r\n]+([\s\S]*?)###FIM_CMD/gi;
     let match = regex.exec(texto);
@@ -123,6 +145,7 @@ export async function executarComandoSugerido(texto, rl) {
             if (resp.toLowerCase() === 's') {
                 console.log("\nExecutando...");
                 
+                // Tratamento especial para navegação virtual (cd)
                 if (comando.startsWith("cd ")) {
                     try {
                         const novaPasta = comando.replace("cd ", "").trim();
@@ -151,3 +174,47 @@ export async function executarComandoSugerido(texto, rl) {
         });
     });
 }
+
+// #endregion
+
+// #region 5. Operações Git (Auto-Commit)
+// =============================================================================
+
+export function lerGitDiff() {
+    try {
+        // --cached = staged area
+        const diff = execSync("git diff --cached", { encoding: 'utf8' });
+        return diff;
+    } catch (error) {
+        return null;
+    }
+}
+
+export async function realizarCommit(mensagem, rl) {
+    console.log(`\n\x1b[36m[SUGESTÃO DE COMMIT]\x1b[0m`);
+    console.log(`\x1b[1m${mensagem}\x1b[0m`);
+    
+    return new Promise((resolve) => {
+        rl.question("\n\x1b[35mConfirmar commit? (s/n): \x1b[0m", (resp) => {
+            if (resp.toLowerCase() === 's') {
+                // Escapa aspas para não quebrar o bash
+                const msgSegura = mensagem.replace(/"/g, '\\"');
+                
+                exec(`git commit -m "${msgSegura}"`, (error, stdout, stderr) => {
+                    if (error) {
+                        console.error(`\x1b[31mErro ao commitar:\x1b[0m ${error.message}`);
+                    } else {
+                        console.log(`\x1b[32m✔ Commit realizado com sucesso!\x1b[0m`);
+                        console.log(stdout);
+                    }
+                    resolve(true);
+                });
+            } else {
+                console.log("\x1b[90mCommit cancelado.\x1b[0m");
+                resolve(false);
+            }
+        });
+    });
+}
+
+// #endregion
