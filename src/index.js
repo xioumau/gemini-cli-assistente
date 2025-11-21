@@ -2,7 +2,9 @@
 
 // #region 1. Imports e Configurações Iniciais
 // =============================================================================
-import 'dotenv/config';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import dotenv from 'dotenv'; // Importamos a lib (sem /config) para configurar manualmente
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import readline from "readline";
 import fs from "fs"; 
@@ -17,8 +19,25 @@ import {
   realizarCommit
 } from "./utils/tools.js"; 
 
+// --- CONFIGURAÇÃO DE CAMINHO DO .ENV ---
+// 1. Descobre onde este arquivo (index.js) está guardado fisicamente
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 2. Calcula o caminho do .env (que está uma pasta acima de /src)
+const envPath = path.resolve(__dirname, '..', '.env');
+
+// 3. Força o dotenv a ler aquele arquivo específico, não importa onde você esteja rodando
+const result = dotenv.config({ path: envPath });
+
 const API_KEY = process.env.GEMINI_API_KEY;
-if (!API_KEY) { console.error("Erro: .env não configurado."); process.exit(1); }
+
+if (result.error || !API_KEY) { 
+    console.error(`\n\x1b[31m[ERRO CRÍTICO] Não foi possível carregar a API Key.\x1b[0m`);
+    console.error(`O sistema buscou o arquivo .env em: \x1b[33m${envPath}\x1b[0m`);
+    console.error("Verifique se o arquivo existe e tem a chave GEMINI_API_KEY configurada.");
+    process.exit(1); 
+}
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
