@@ -4,10 +4,11 @@
 // =============================================================================
 import { fileURLToPath } from 'url';
 import path from 'path';
-import dotenv from 'dotenv'; // Importamos a lib (sem /config) para configurar manualmente
+import dotenv from 'dotenv'; 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import readline from "readline";
 import fs from "fs"; 
+import os from 'os'; // <--- Importante para achar a pasta do usuário
 
 import { gerarContexto, gerarPromptCommit } from "./utils/prompts.js"; 
 import { 
@@ -19,23 +20,21 @@ import {
   realizarCommit
 } from "./utils/tools.js"; 
 
-// --- CONFIGURAÇÃO DE CAMINHO DO .ENV ---
-// 1. Descobre onde este arquivo (index.js) está guardado fisicamente
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// --- CONFIGURAÇÃO GLOBAL DE ENV ---
+// Define o caminho: C:\Users\SeuUsuario\.gemini.env
+const envPath = path.join(os.homedir(), '.gemini.env');
 
-// 2. Calcula o caminho do .env (que está uma pasta acima de /src)
-const envPath = path.resolve(__dirname, '..', '.env');
-
-// 3. Força o dotenv a ler aquele arquivo específico, não importa onde você esteja rodando
+// Tenta carregar desse caminho específico
 const result = dotenv.config({ path: envPath });
 
 const API_KEY = process.env.GEMINI_API_KEY;
 
+// Validação de segurança
 if (result.error || !API_KEY) { 
-    console.error(`\n\x1b[31m[ERRO CRÍTICO] Não foi possível carregar a API Key.\x1b[0m`);
-    console.error(`O sistema buscou o arquivo .env em: \x1b[33m${envPath}\x1b[0m`);
-    console.error("Verifique se o arquivo existe e tem a chave GEMINI_API_KEY configurada.");
+    console.error(`\n\x1b[31m[ERRO CRÍTICO] Configuração não encontrada.\x1b[0m`);
+    console.error(`O sistema buscou o arquivo de configuração em:`);
+    console.error(`\x1b[33m${envPath}\x1b[0m`);
+    console.error("\nPor favor, crie este arquivo e adicione: GEMINI_API_KEY=sua_chave");
     process.exit(1); 
 }
 
