@@ -1,23 +1,35 @@
 // prompts.js
-export function gerarPromptCommit(diff) {
+export function gerarPromptCommit(diff, taskId = null) {
+  // Define o formato base
+  let formatoExemplo = "<tipo>(<escopo opcional>): <descrição breve>";
+  let instrucaoExtra = "";
+
+  // Se tiver ID de tarefa, muda a regra
+  if (taskId) {
+      instrucaoExtra = `REQUISITO OBRIGATÓRIO: A mensagem DEVE começar com "AB#${taskId} " seguido do padrão convencional.`;
+      formatoExemplo = `AB#${taskId} ${formatoExemplo}`;
+  }
+
   return `
 === TAREFA DE COMMIT GIT ===
 Você é um assistente especialista em Git e Conventional Commits.
 Sua tarefa é gerar uma mensagem de commit curta e descritiva baseada nas alterações abaixo.
 
 REGRA DE OURO:
-Responda APENAS com a mensagem do commit. Sem aspas, sem explicações, sem "Aqui está".
+Responda APENAS com a mensagem do commit. Sem aspas, sem explicações, sem markdown.
 
-FORMATO (Conventional Commits):
-<tipo>(<escopo opcional>): <descrição breve>
+${instrucaoExtra}
+
+FORMATO ESPERADO:
+${formatoExemplo}
 
 Tipos comuns:
 - feat: nova funcionalidade
 - fix: correção de bug
 - docs: documentação
 - style: formatação
-- refactor: refatoração de código
-- chore: ajustes de build/ferramentas
+- refactor: refatoração
+- chore: ajustes internos
 
 === ALTERAÇÕES (GIT DIFF) ===
 ${diff}

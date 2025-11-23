@@ -117,6 +117,17 @@ async function init() {
 
     // --- MODO A: AUTO-COMMIT ---
     if (args.includes('commit')) {
+        
+        // 1. Lógica para detectar padrão de trabalho (gemini commit work 12345)
+        let workTaskId = null;
+        const workIndex = args.indexOf('work');
+        
+        // Se achou 'work' e tem algo depois dele...
+        if (workIndex !== -1 && args[workIndex + 1]) {
+            workTaskId = args[workIndex + 1];
+            console.log(`\x1b[35m[WORK MODE] Tarefa detectada: AB#${workTaskId}\x1b[0m`);
+        }
+
         console.log(`\x1b[34m[GIT] Analisando alterações (staged)...\x1b[0m`);
         
         const diff = lerGitDiff();
@@ -132,7 +143,8 @@ async function init() {
             process.exit(0);
         }
 
-        const promptCommit = gerarPromptCommit(diff);
+        // Passamos o ID (se existir) para o gerador de prompt
+        const promptCommit = gerarPromptCommit(diff, workTaskId);
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
         try {
