@@ -9,6 +9,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import readline from "readline";
 import fs from "fs"; 
 import os from 'os';
+import { exibirHelp } from "./utils/help.js";
 
 import { 
     gerarContexto, 
@@ -108,6 +109,10 @@ function readStdin() {
 
 async function init() {
     const args = process.argv.slice(2);
+    
+    if (args.includes('help')) {
+        exibirHelp(args);
+    }
 
     // ==================================================
     // MODO A: AUTO-COMMIT (COM SECURITY GATE)
