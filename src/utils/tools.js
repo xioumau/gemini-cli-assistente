@@ -224,17 +224,40 @@ export async function realizarCommit(mensagem, rl) {
 
 export function carregarImagem(caminhoImagem) {
     try {
+        // Resolve o caminho
         const caminhoCompleto = path.resolve(process.cwd(), caminhoImagem);
         
+        // 1. Validação de Existência
         if (!fs.existsSync(caminhoCompleto)) {
             console.error(`\x1b[31m[ERRO] Imagem não encontrada: ${caminhoCompleto}\x1b[0m`);
             return null;
         }
 
+        // 2. Validação de Segurança (Path Traversal / Tipo de Arquivo)
+        const ext = path.extname(caminhoCompleto).toLowerCase();
+        const allowedExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.heic'];
+        
+        if (!allowedExtensions.includes(ext)) {
+            console.error(`\x1b[31m[ERRO DE SEGURANÇA] Tipo de arquivo não permitido: ${ext}\x1b[0m`);
+            console.error(`Permitidos: ${allowedExtensions.join(', ')}`);
+            return null;
+        }
+
+        // 3. Validação de DoS (Tamanho do Arquivo)
+        const stats = fs.statSync(caminhoCompleto);
+        const MAX_SIZE_MB = 10;
+        const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+
+        if (stats.size > MAX_SIZE_BYTES) {
+            console.error(`\x1b[31m[ERRO] Imagem muito grande (${(stats.size / 1024 / 1024).toFixed(2)}MB).\x1b[0m`);
+            console.error(`O limite de segurança é ${MAX_SIZE_MB}MB.`);
+            return null;
+        }
+
+        // Se passou por tudo, lê o arquivo
         const dadosArquivo = fs.readFileSync(caminhoCompleto);
         const base64Data = dadosArquivo.toString('base64');
         
-        const ext = path.extname(caminhoCompleto).toLowerCase();
         let mimeType = 'image/png';
         if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
         if (ext === '.webp') mimeType = 'image/webp';
