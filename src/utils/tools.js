@@ -218,3 +218,41 @@ export async function realizarCommit(mensagem, rl) {
 }
 
 // #endregion
+
+// #region 6. Multimodal (Imagens)
+// =============================================================================
+
+export function carregarImagem(caminhoImagem) {
+    try {
+        const caminhoCompleto = path.resolve(process.cwd(), caminhoImagem);
+        
+        if (!fs.existsSync(caminhoCompleto)) {
+            console.error(`\x1b[31m[ERRO] Imagem não encontrada: ${caminhoCompleto}\x1b[0m`);
+            return null;
+        }
+
+        const dadosArquivo = fs.readFileSync(caminhoCompleto);
+        const base64Data = dadosArquivo.toString('base64');
+        
+        const ext = path.extname(caminhoCompleto).toLowerCase();
+        let mimeType = 'image/png';
+        if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+        if (ext === '.webp') mimeType = 'image/webp';
+        if (ext === '.heic') mimeType = 'image/heic';
+
+        console.log(`\x1b[35m[VISÃO] Imagem carregada: ${path.basename(caminhoCompleto)}\x1b[0m`);
+
+        return {
+            inlineData: {
+                data: base64Data,
+                mimeType: mimeType
+            }
+        };
+
+    } catch (error) {
+        console.error(`Erro ao processar imagem: ${error.message}`);
+        return null;
+    }
+}
+
+// #endregion

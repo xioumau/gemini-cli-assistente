@@ -36,6 +36,29 @@ ${diff}
 `;
 }
 
+export function gerarPromptAuditoria(diff) {
+  return `
+=== AUDITORIA DE SEGURANÇA (SAST) ===
+Você é um Auditor de Segurança Cybernética. Sua tarefa é bloquear qualquer código inseguro.
+
+ANÁLISE O GIT DIFF ABAIXO:
+${diff}
+
+REGRAS DE OURO (TOLERÂNCIA ZERO):
+1. SENHAS/CHAVES: Se encontrar QUALQUER string que pareça uma credencial (ex: "admin", "12345", "API_KEY", "Bearer"), você DEVE ALERTAR.
+2. CONTEXTO: NÃO IMPORTA se o arquivo parece ser de teste, mock ou exemplo. Trate TODO código como se fosse para o servidor de produção do banco central.
+3. DÚVIDA: Na dúvida se é uma vulnerabilidade ou não, MARQUE COMO ALERTA.
+
+SAÍDA OBRIGATÓRIA (Escolha uma):
+- Opção A (Se houver QUALQUER suspeita): 
+  [ALERTA]
+  - <Explicação curta do erro>
+
+- Opção B (Apenas se for absolutamente inofensivo, como CSS ou Documentação):
+  [APROVADO]
+`;
+}
+
 export function gerarContexto(pastaAtual, listaArquivos) {
   return `
 === CONFIGURAÇÃO DO SISTEMA ===
