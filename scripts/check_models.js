@@ -1,54 +1,52 @@
-import 'dotenv/config';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import dotenv from "dotenv";
+import path from "path";
+import os from "os";
+
+// Configura Env (igual ao seu app principal)
+const localEnvPath = path.join(process.cwd(), ".env");
+const globalEnvPath = path.join(os.homedir(), ".gemini.env");
+
+dotenv.config({ path: localEnvPath });
+if (!process.env.GEMINI_API_KEY) {
+  dotenv.config({ path: globalEnvPath });
+}
 
 const API_KEY = process.env.GEMINI_API_KEY;
 
 if (!API_KEY) {
-  console.error("Erro: Chave não encontrada no .env");
+  console.error("❌ Erro: API Key não encontrada.");
   process.exit(1);
 }
 
-const genAI = new GoogleGenerativeAI(API_KEY);
+console.log(`🔑 Usando Key final: ...${API_KEY.slice(-4)}`);
+console.log("📡 Consultando API do Google...");
 
-async function listarModelosDisponiveis() {
-  console.log("--- Verificando modelos compatíveis com sua API Key ---");
-  
+async function run() {
   try {
-    // O truque aqui é listar todos e filtrar
-    // A biblioteca às vezes retorna uma lista crua, vamos formatar
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`);
-    const data = await response.json();
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`
+    );
+    const data = await resp.json();
 
-    if (!data.models) {
-        console.log("Nenhum modelo encontrado.");
-        return;
+    if (data.error) {
+      console.error("❌ Erro da API:", data.error.message);
+      return;
     }
 
-    const textModels = data.models.filter(m => 
-        m.supportedGenerationMethods.includes("generateContent")
-    );
+    console.log("\n✅ MODELOS DISPONÍVEIS PARA VOCÊ:");
+    console.log("==================================");
 
-    console.log(`\nEncontrados ${textModels.length} modelos de texto/chat.\n`);
-    console.log("RECOMENDAÇÃO DE HIERARQUIA (Copie para o seu código):");
-    console.log("-----------------------------------------------------");
+    // Filtra só os que geram texto (chat)
+    const models = data.models
+      .filter((m) => m.supportedGenerationMethods.includes("generateContent"))
+      .map((m) => m.name.replace("models/", "")); // Limpa o nome
 
-    // Vamos categorizar para te ajudar a escolher
-    const flashModels = textModels.filter(m => m.name.includes("flash") && !m.name.includes("8b"));
-    const proModels = textModels.filter(m => m.name.includes("pro") && !m.name.includes("vision"));
-    const stableModels = textModels.filter(m => !m.name.includes("exp") && !m.name.includes("preview"));
+    models.forEach((m) => console.log(`- "${m}"`));
 
-    console.log("\n⚡ VELOCIDADE (Flash) - Ideais para CLI e respostas rápidas:");
-    flashModels.forEach(m => console.log(`   "${m.name.replace("models/", "")}"`));
-
-    console.log("\n🧠 INTELIGÊNCIA (Pro) - Ideais para raciocínio complexo:");
-    proModels.forEach(m => console.log(`   "${m.name.replace("models/", "")}"`));
-
-    console.log("\n🛡️ ESTABILIDADE (Versões Fixas) - Menor chance de erro 404/503:");
-    stableModels.forEach(m => console.log(`   "${m.name.replace("models/", "")}"`));
-
-  } catch (error) {
-    console.error("Erro ao listar modelos:", error.message);
+    console.log("==================================");
+  } catch (e) {
+    console.error("Erro na requisição:", e.message);
   }
 }
 
-listarModelosDisponiveis();
+run();
