@@ -1,4 +1,4 @@
-import { exec, execSync } from "child_process";
+import { exec, execSync, spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 
@@ -164,6 +164,9 @@ export async function confirmarESalvarArquivos(sugestoes, rl) {
 // #region 4. Execução de Comandos de Sistema (###CMD)
 // =============================================================================
 
+/**
+ * Executa comandos sugeridos pela IA com detecção de comandos críticos.
+ */
 export async function executarComandoSugerido(texto, rl) {
   const regex = /###CMD:\s*([^\r\n]+)[\r\n]+([\s\S]*?)###FIM_CMD/gi;
   let match = regex.exec(texto);
@@ -173,18 +176,51 @@ export async function executarComandoSugerido(texto, rl) {
   const comando = match[1].trim();
   const explicacao = match[2].trim();
 
+  // --- DETECTOR DE COMANDOS CRÍTICOS ---
+  const keywordsCriticas = [
+    "rm",
+    "del",
+    "remove",
+    "erase",
+    "rd",
+    "rmdir", // Deleção
+    "mv",
+    "move",
+    "rename", // Movimentação
+    ">",
+    "truncate",
+    "format",
+    "dd", // Sobrescrita/Destrutivos
+  ];
+
+  // Verifica se o comando contém alguma das palavras perigosas
+  const ehCritico = keywordsCriticas.some((k) => {
+    // Usa regex para garantir que pegamos a palavra inteira (evita 'move' em 'movement')
+    const regexK = new RegExp(`\\b${k}\\b`, "i");
+    return regexK.test(comando) || comando.includes(">");
+  });
+
   console.log(`\n\x1b[35m[PROPOSTA DE COMANDO] Terminal:\x1b[0m`);
   console.log(`\x1b[1m> ${comando}\x1b[0m`);
   if (explicacao) console.log(`ℹ️  ${explicacao}`);
+
+  // Alerta Visual se for crítico
+  if (ehCritico) {
+    console.log(
+      `\n\x1b[41m\x1b[37m ⚠️  PERIGO: COMANDO CRÍTICO DETECTADO ⚠️ \x1b[0m`
+    );
+    console.log(
+      `\x1b[31mEste comando pode EXCLUIR, MOVER ou SOBRESCREVER arquivos permanentemente.\x1b[0m`
+    );
+  }
 
   return new Promise((resolve) => {
     rl.question(
       "\n\x1b[35mDeseja executar este comando? (s/n):\x1b[0m ",
       (resp) => {
         if (resp.toLowerCase() === "s") {
-          console.log("\nExecutando...");
+          console.log("\n\x1b[90mExecutando...\x1b[0m\n");
 
-          // Tratamento especial para navegação virtual (cd)
           if (comando.startsWith("cd ")) {
             try {
               const novaPasta = comando.replace("cd ", "").trim();
@@ -192,23 +228,39 @@ export async function executarComandoSugerido(texto, rl) {
               console.log(
                 `\x1b[32m✔ Diretório alterado para: ${process.cwd()}\x1b[0m`
               );
+              resolve("Diretório alterado");
             } catch (err) {
               console.error(
                 `\x1b[31mErro ao mudar diretório: ${err.message}\x1b[0m`
               );
+              resolve(null);
             }
-            resolve("Diretório alterado via Node.js");
             return;
           }
 
-          exec(comando, (error, stdout, stderr) => {
-            if (error) {
-              console.error(`\x1b[31mErro:\x1b[0m ${error.message}`);
+          // Mantemos o shell: true para flexibilidade, mas com sua revisão humana
+          const processo = spawn(comando, { shell: true });
+          let fullOutput = "";
+
+          processo.stdout.on("data", (data) => {
+            const str = data.toString();
+            fullOutput += str;
+            process.stdout.write(str);
+          });
+
+          processo.stderr.on("data", (data) => {
+            process.stdout.write(`\x1b[33m${data}\x1b[0m`);
+          });
+
+          processo.on("close", (code) => {
+            if (code === 0) {
+              console.log(`\n\x1b[32m✔ Comando finalizado.\x1b[0m`);
             } else {
-              if (stdout) console.log(`\x1b[32mSaída:\x1b[0m\n${stdout}`);
-              if (stderr) console.log(`\x1b[33mAviso:\x1b[0m ${stderr}`);
+              console.error(
+                `\n\x1b[31m✖ Comando encerrou com erro (Código: ${code})\x1b[0m`
+              );
             }
-            resolve(stdout);
+            resolve(fullOutput);
           });
         } else {
           console.log(" \x1b[90mComando cancelado.\x1b[0m");
@@ -224,6 +276,9 @@ export async function executarComandoSugerido(texto, rl) {
 // #region 5. Operações Git (Auto-Commit)
 // =============================================================================
 
+/**
+ * Lê as alterações que estão no "Staged Area" (git add).
+ */
 export function lerGitDiff() {
   try {
     // --cached = staged area
@@ -234,31 +289,68 @@ export function lerGitDiff() {
   }
 }
 
+/**
+ * Realiza o commit permitindo confirmação, cancelamento ou edição manual.
+ */
 export async function realizarCommit(mensagem, rl) {
-  console.log(`\n\x1b[36m[SUGESTÃO DE COMMIT]\x1b[0m`);
-  console.log(`\x1b[1m${mensagem}\x1b[0m`);
+  let mensagemAtual = mensagem.trim();
 
-  return new Promise((resolve) => {
-    rl.question("\n\x1b[35mConfirmar commit? (s/n): \x1b[0m", (resp) => {
-      if (resp.toLowerCase() === "s") {
-        // Escapa aspas duplas internas para não quebrar o comando do shell
-        const msgSegura = mensagem.replace(/"/g, '\\"');
+  const menuCommit = () => {
+    return new Promise((resolve) => {
+      console.log(`\n\x1b[36m[SUGESTÃO DE COMMIT]\x1b[0m`);
+      console.log(`\x1b[1m${mensagemAtual}\x1b[0m`);
 
-        exec(`git commit -m "${msgSegura}"`, (error, stdout, stderr) => {
-          if (error) {
-            console.error(`\x1b[31mErro ao commitar:\x1b[0m ${error.message}`);
+      rl.question(
+        "\n\x1b[35mDeseja: [s] Confirmar / [n] Cancelar / [e] Editar? \x1b[0m",
+        (resp) => {
+          const escolha = resp.toLowerCase();
+
+          if (escolha === "s") {
+            console.log("\x1b[90mCommitando...\x1b[0m");
+
+            // --- SOLUÇÃO SEGURA: Usar spawn em vez de exec ---
+            // Passamos os argumentos como um ARRAY.
+            // O Shell não interpreta caracteres especiais dentro do array.
+            const gitProcess = spawn("git", ["commit", "-m", mensagemAtual]);
+
+            gitProcess.stdout.on("data", (data) =>
+              console.log(`\x1b[32m${data}\x1b[0m`)
+            );
+            gitProcess.stderr.on("data", (data) =>
+              console.error(`\x1b[31m${data}\x1b[0m`)
+            );
+
+            gitProcess.on("close", (code) => {
+              if (code === 0) {
+                console.log(`\x1b[32m✔ Commit realizado com sucesso!\x1b[0m`);
+                resolve(true);
+              } else {
+                console.error(
+                  `\x1b[31m✖ Erro ao commitar (Código: ${code})\x1b[0m`
+                );
+                resolve(false);
+              }
+            });
+          } else if (escolha === "e") {
+            rl.question(
+              "\n\x1b[36mDigite a nova mensagem de commit:\x1b[0m\n> ",
+              (novaMsg) => {
+                if (novaMsg.trim().length > 0) {
+                  mensagemAtual = novaMsg.trim();
+                }
+                resolve(menuCommit());
+              }
+            );
           } else {
-            console.log(`\x1b[32m✔ Commit realizado com sucesso!\x1b[0m`);
-            console.log(stdout);
+            console.log("\x1b[90mCommit cancelado.\x1b[0m");
+            resolve(false);
           }
-          resolve(true);
-        });
-      } else {
-        console.log("\x1b[90mCommit cancelado.\x1b[0m");
-        resolve(false);
-      }
+        }
+      );
     });
-  });
+  };
+
+  return menuCommit();
 }
 
 // #endregion
